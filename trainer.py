@@ -28,7 +28,7 @@ def create_command_parser():
     data_modality_types = ['rgb-fd-bin','rgb-kfd-bin','rgb-kgt-bin','rgb-kor-bin','rgb-kor-kw']
 
     loss_names = ['l1', 'l2', 'il1', 'absrel']
-    data_types = ['visim', 'visim_seq', 'kitti' ]
+    data_types = ['visim', 'visim_seq', 'kitti', 'dji' ]
 
     opt_names = ['sgd', 'adam']
     from dataloaders.dense_to_sparse import UniformSampling, SimulatedStereo
@@ -43,7 +43,7 @@ def create_command_parser():
                         help='training_mode: ' + ' | '.join(training_mode) + ' (default: dc1)')
 
     #dcnet
-    parser.add_argument('--dcnet-arch', metavar='ARCH', default='resnet18', choices=model_names,
+    parser.add_argument('--dcnet-arch', metavar='ARCH', default='gudepthcompnet18', choices=model_names,
                         help='model architecture: ' + ' | '.join(model_names) + ' (default: resnet18)')
 
     parser.add_argument('--dcnet-pretrained', default='', type=str, metavar='PATH',
@@ -66,21 +66,21 @@ def create_command_parser():
                         help='path to pretraining checkpoint (default: empty)')
 
     #input data
-    parser.add_argument('--data-type', metavar='DATA', default='visim',
+    parser.add_argument('--data-type', metavar='DATA', default='dji',
                         choices=data_types, help='dataset: ' + ' | '.join(data_types) + ' (default: visim)')
-    parser.add_argument('--data-path', default='data', type=str, metavar='PATH',
+    parser.add_argument('--data-path', default='/home/hjx/Documents/dji_data/DJI_gen', type=str, metavar='PATH',
                         help='path to data folder')
     parser.add_argument('--data-modality', metavar='MODALITY', default='rgb-fd-bin', choices=data_modality_types,
                         type=str, help='modality: ' + ' | '.join(data_modality_types) + ' (default: rgb-fd-bin)')
-    parser.add_argument('-j', '--workers', default=10, type=int, metavar='N',
+    parser.add_argument('-j', '--workers', default=8, type=int, metavar='N',
                         help='number of data loading workers (default: 10)')
     parser.add_argument('--epochs', default=15, type=int, metavar='N',
                         help='number of total epochs to run (default: 15)')
-    parser.add_argument('--max-gt-depth', default=math.inf, type=float, metavar='D',
+    parser.add_argument('--max-gt-depth', default=250.0, type=float, metavar='D',
                         help='cut-off depth of ground truth, negative values means infinity (default: inf [m])')
-    parser.add_argument('--min-depth', default=0.0, type=float, metavar='D',
+    parser.add_argument('--min-depth', default=100.0, type=float, metavar='D',
                         help='cut-off depth of sparsifier (default: 0 [m])')
-    parser.add_argument('--max-depth', default=-1.0, type=float, metavar='D',
+    parser.add_argument('--max-depth', default=250, type=float, metavar='D',
                         help='cut-off depth of sparsifier, negative values means infinity (default: inf [m])')
     parser.add_argument('--divider', default=0, type=float, metavar='D',
                         help='Normalization factor - zero means per frame (default: 0 [m])')
@@ -98,7 +98,7 @@ def create_command_parser():
     #training params
     parser.add_argument('-o', '--optimizer', metavar='OPTIMIZER', default='adam', choices=opt_names,
                         help='Optimizer: ' + ' | '.join(opt_names) + ' (default: adam)')
-    parser.add_argument('-b', '--batch-size', default=8, type=int,
+    parser.add_argument('-b', '--batch-size', default=1, type=int,
                         help='mini-batch size (default: 8)')
     parser.add_argument('-lr', '--learning-rate', default=0.001, type=float,dest='lr',
                         metavar='LR', help='initial learning rate (default 0.001)')
@@ -192,6 +192,13 @@ def train(train_loader, model, criterion, optimizer,output_folder,  epoch):
     end = time.time()
     num_total_samples = len(train_loader)
     for i, (input, target, scale) in enumerate(train_loader):
+        batch_size, view_num, channels, height, width = list(input.size())  # (B, V, C, H, W)
+        # Image Stack
+        input = torch.reshape(input, (
+            batch_size * view_num, channels, height, width))  # (B*V, C_stage, H_stage, W_stage)
+
+        target = torch.reshape(target, (
+            batch_size * view_num, 1, height, width))  # (B*V, C_stage, H_stage, W_stage)
 
         torch.cuda.synchronize()
         data_time = time.time() - end
@@ -199,7 +206,9 @@ def train(train_loader, model, criterion, optimizer,output_folder,  epoch):
         # compute pred
         end = time.time()
 
-        input, target = input.cuda(), target.cuda()
+        input, target, scale = input.cuda(), target.cuda(), scale.cuda()
+        expand_size = input.shape[0] / scale.shape[0]
+        scale = scale.expand([int(expand_size), 1])
         target_depth = target[:, 0:1, :, :]
         prediction = model(input)
         if prediction[2] is not None: #d1,c1,d2
@@ -215,34 +224,34 @@ def train(train_loader, model, criterion, optimizer,output_folder,  epoch):
         loss.backward()  # compute gradient and do SGD step
         optimizer.step()
 
-        torch.cuda.synchronize()
-        gpu_time = time.time() - end
+        # torch.cuda.synchronize()
+        # gpu_time = time.time() - end
+        #
+        # for cb in range(prediction[0].size(0)):
+        #     prediction[0][cb, :, :, :] *= scale[cb]
+        #     if prediction[2] is not None:
+        #         prediction[2][cb, :, :, :] *= scale[cb]
+        #     target_depth[cb, :, :, :] *= scale[cb]
+        #
+        # # measure accuracy and record loss
+        # result = [Result(),Result()]
+        # result[0].evaluate(prediction[0][:, 0:1, :, :].data, target_depth.data)
+        # average_meter[0].update(result[0], gpu_time, data_time, criterion.loss, input.size(0))
+        # if prediction[2] is not None:
+        #     result[1].evaluate(prediction[2][:, 0:1, :, :].data, target_depth.data)
+        #     average_meter[1].update(result[1], gpu_time, data_time, criterion.loss, input.size(0))
+        #
+        #
+        # end = time.time()
 
-        for cb in range(prediction[0].size(0)):
-            prediction[0][cb, :, :, :] *= scale[cb]
-            if prediction[2] is not None:
-                prediction[2][cb, :, :, :] *= scale[cb]
-            target_depth[cb, :, :, :] *= scale[cb]
-
-        # measure accuracy and record loss
-        result = [Result(),Result()]
-        result[0].evaluate(prediction[0][:, 0:1, :, :].data, target_depth.data)
-        average_meter[0].update(result[0], gpu_time, data_time, criterion.loss, input.size(0))
-        if prediction[2] is not None:
-            result[1].evaluate(prediction[2][:, 0:1, :, :].data, target_depth.data)
-            average_meter[1].update(result[1], gpu_time, data_time, criterion.loss, input.size(0))
-
-
-        end = time.time()
-
-        if (i + 1) % 10 == 0:
-            print_error('Train',num_total_samples, average_meter[0].average(), result[0], criterion.loss, data_time, gpu_time, i, epoch)
-            if prediction[2] is not None:
-                print_error('Train',num_total_samples, average_meter[1].average(), result[1], criterion.loss, data_time, gpu_time, i, epoch)
-
-    report_epoch_error(os.path.join(output_folder,'train.csv'), epoch, average_meter[0].average())
-    if prediction[2] is not None:
-        report_epoch_error(os.path.join(output_folder,'train.csv'), epoch, average_meter[1].average())
+        # if (i + 1) % 10 == 0:
+        #     print_error('Train',num_total_samples, average_meter[0].average(), result[0], criterion.loss, data_time, gpu_time, i, epoch)
+        #     if prediction[2] is not None:
+        #         print_error('Train',num_total_samples, average_meter[1].average(), result[1], criterion.loss, data_time, gpu_time, i, epoch)
+    #
+    # report_epoch_error(os.path.join(output_folder,'train.csv'), epoch, average_meter[0].average())
+    # if prediction[2] is not None:
+    #     report_epoch_error(os.path.join(output_folder,'train.csv'), epoch, average_meter[1].average())
 
 
 def report_top_result(filename_csv,epoch,epoch_result):

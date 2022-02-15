@@ -58,7 +58,7 @@ class VISIMDataset(MyDataloaderExt):
         for key, value in attrib_list.items():
             attrib_np[key] = transform(value)
             if key in Modality.need_divider: #['gt_depth','fd','kor','kde','kgt','dor','dde', 'd3dwde','d3dwor','dvor','dvde','dvgt']:
-                attrib_np[key] =  scale*attrib_np[key] #(attrib_np[key] - min_depth+0.01) / (max_depth - min_depth) #/
+                attrib_np[key] = scale*attrib_np[key] #(attrib_np[key] - min_depth+0.01) / (max_depth - min_depth) #/
             elif key in  Modality.image_size_weight_names: #['d2dwor', 'd2dwde', 'd2dwgt']:
                 attrib_np[key] = attrib_np[key] / (iwidth * 1.5)  # 1.5 about sqrt(2)- square's diagonal
 

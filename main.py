@@ -119,9 +119,9 @@ def main_func(args):
 
 if __name__ == '__main__':
 
-    if len(sys.argv) < 2:
-        trainer.create_command_parser().print_help()
-        exit(0)
+    # if len(sys.argv) < 2:
+    #     trainer.create_command_parser().print_help()
+    #     exit(0)
 
     arg_list = sys.argv[1:]
 

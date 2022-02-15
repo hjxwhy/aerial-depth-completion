@@ -14,13 +14,52 @@ import numpy as np
 from scipy.stats import poisson
 from scipy import signal
 import math
+try:
+    from torch._six import container_abcs
+except ImportError:
+    import collections.abc as container_abcs
+from itertools import repeat
+def _ntuple(n):
+    def parse(x):
+        if isinstance(x, container_abcs.Iterable):
+            return x
+        return tuple(repeat(x, n))
 
+    return parse
+_single = _ntuple(1)
+_pair = _ntuple(2)
+_triple = _ntuple(3)
+_quadruple = _ntuple(4)
 # The proposed Normalized Convolution Layer
 class NConv2d(_ConvNd):
-    def __init__(self, in_channels, out_channels, kernel_size, pos_fn='softplus', init_method='k', stride=1, padding=0, dilation=1, groups=1, bias=True):
-        
+    def __init__(self, in_channels,
+                 out_channels,
+                 kernel_size,
+                 pos_fn='softplus',
+                 init_method='k',
+                 stride=1,
+                 padding=0,
+                 dilation=1,
+                 groups=1,
+                 bias=True,
+                 padding_mode='zeros'):
+
         # Call _ConvNd constructor
-        super(NConv2d, self).__init__(in_channels, out_channels, kernel_size, stride, padding, dilation, False, 0, groups, bias)
+        kernel_size = _pair(kernel_size)
+        stride = _pair(stride)
+        padding = _pair(padding)
+        dilation = _pair(dilation)
+        super(NConv2d, self).__init__(in_channels,
+                                      out_channels,
+                                      kernel_size,
+                                      stride,
+                                      padding,
+                                      dilation,
+                                      False,
+                                      0,
+                                      groups,
+                                      bias,
+                                      padding_mode)
         
         self.eps = 1e-20
         self.pos_fn = pos_fn

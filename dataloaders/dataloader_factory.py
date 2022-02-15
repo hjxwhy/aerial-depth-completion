@@ -4,7 +4,9 @@ import numpy as np
 from dataloaders.dense_to_sparse import UniformSampling, SimulatedStereo
 
 
-def create_data_loaders(data_path, data_type='visim', loader_type='val', arch='', sparsifier_type='uar', num_samples=500, modality='rgb-fd', depth_divisor=1, max_depth=-1, max_gt_depth=-1, batch_size=8, workers=8):
+def create_data_loaders(data_path, data_type='visim', loader_type='val', arch='', sparsifier_type='uar', num_samples=500,
+                        modality='rgb-fd', depth_divisor=1, max_depth=-1, max_gt_depth=-1, batch_size=8, workers=8,
+                        width=320, height=240):
     # Data loading code
     print("=> creating data loaders ...")
 
@@ -44,6 +46,11 @@ def create_data_loaders(data_path, data_type='visim', loader_type='val', arch=''
         from dataloaders.visim_dataloader import VISIMSeqDataset
         dataset = VISIMSeqDataset(data_path, type=loader_type,
                                   modality=modality, sparsifier=sparsifier, depth_divider=depth_divisor, is_resnet= ('resnet' in arch), max_gt_depth=max_gt_depth)
+    elif data_type == 'dji':
+        from dataloaders.datasets import MVSDataset
+        dataset = MVSDataset(data_path, loader_type, "gt", height=height, width=width, tuples_ext='dso_optimization_windows',
+                             ignore_pose_scale=True, tuples_default_flag=False, tuples_default_frame_num=3, tuples_default_frame_dist=20,
+                             depth_min=100, depth_max=250)
     else:
         raise RuntimeError('data type not found.' +
                            'The dataset must be either of kitti, visim or visim_seq.')
@@ -51,7 +58,7 @@ def create_data_loaders(data_path, data_type='visim', loader_type='val', arch=''
     if loader_type == 'val':
         # set batch size to be 1 for validation
         loader = torch.utils.data.DataLoader(dataset,
-            batch_size=1, shuffle=False, num_workers=workers, pin_memory=True)
+            batch_size=batch_size, shuffle=False, num_workers=workers, pin_memory=True)
         print("=> Val loader:{}".format(len(dataset)))
     elif loader_type == 'train':
         loader = torch.utils.data.DataLoader(
