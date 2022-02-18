@@ -1,20 +1,20 @@
 import os
 from collections import OrderedDict
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
 from model_zoo.nconv_sd import CNN as unguided_net
 from model_zoo.s2d_resnet import S2DResNet
 from model_zoo.s2d_u_resnet import S2DUResNet
 
-
 class ConfidenceDepthFrameworkFactory():
-    def __init__(self):
-        a =1
+    """工厂类
 
-    def create_dc_model(self,model_arch,pretrained_args,input_type,output_type):
+    """
+    def __init__(self):
+        pass
+
+    def create_dc_model(self, model_arch, pretrained_args, input_type, output_type):
 
         if pretrained_args == 'resnet':
             use_resnet_pretrained = True
@@ -22,12 +22,15 @@ class ConfidenceDepthFrameworkFactory():
             use_resnet_pretrained = False
 
         if model_arch == 'resnet18':
-            #upproj is the best and default in the sparse-to-dense icra 2018 paper
-            model = S2DResNet(layers=18, decoder='upproj', in_channels=len(input_type), out_channels=len(output_type), pretrained=use_resnet_pretrained)
+            # upproj is the best and default in the sparse-to-dense icra 2018 paper
+            model = S2DResNet(layers=18, decoder='upproj', in_channels=len(input_type), out_channels=len(output_type),
+                              pretrained=use_resnet_pretrained)
         elif model_arch == 'udepthcompnet18':
-            model = S2DUResNet(layers=18, in_channels=len(input_type), out_channels=len(output_type), pretrained=use_resnet_pretrained,unguided=False)
+            model = S2DUResNet(layers=18, in_channels=len(input_type), out_channels=len(output_type),
+                               pretrained=use_resnet_pretrained, unguided=False)
         elif model_arch == 'gudepthcompnet18':
-            model = S2DUResNet(layers=18, in_channels=len(input_type), out_channels=len(output_type), pretrained=use_resnet_pretrained,unguided=True)
+            model = S2DUResNet(layers=18, in_channels=len(input_type), out_channels=len(output_type),
+                               pretrained=use_resnet_pretrained, unguided=True)
 
         else:
             if model_arch == 'gms_depthcompnet':
@@ -38,11 +41,11 @@ class ConfidenceDepthFrameworkFactory():
                 raise RuntimeError('Model: {} not found.'.format(model_arch))
 
         if not use_resnet_pretrained and pretrained_args:
-            self.load_weights(pretrained_args,model)
+            self.load_weights(pretrained_args, model)
 
         return model
 
-    def create_conf_model(self,model_arch,pretrained_args,dc_model):
+    def create_conf_model(self, model_arch, pretrained_args, dc_model):
 
         in_channels = dc_model.out_feature_channels
 
@@ -63,6 +66,13 @@ class ConfidenceDepthFrameworkFactory():
         return model
 
     def create_loss(self, criterion, dual=False, weight1=0):
+        """
+
+        :param criterion:
+        :param dual:
+        :param weight1:
+        :return:
+        """
 
         if criterion == 'l2':
             loss = MaskedMSELoss()
@@ -72,17 +82,18 @@ class ConfidenceDepthFrameworkFactory():
             loss = InvertedMaskedL1Loss()
         elif criterion == 'absrel':
             loss = MaskedAbsRelLoss()
+
         if dual:
             loss = DualLoss(loss, loss, weight1)
-        loss_definition = {'criterion':criterion, 'dual':dual, 'weight1':weight1}
+        loss_definition = {'criterion': criterion, 'dual': dual, 'weight1': weight1}
         return loss, loss_definition
 
-    def create_loss_fromstate(self,definition):
-        return self.create_loss(definition['criterion'],definition['dual'],definition['weight1'])
+    def create_loss_fromstate(self, definition):
+        return self.create_loss(definition['criterion'], definition['dual'], definition['weight1'])
 
     @staticmethod
-    def load_weights(filename,model):
-        if isinstance(filename,OrderedDict):
+    def load_weights(filename, model):
+        if isinstance(filename, OrderedDict):
             weights = filename
             key = 'dict'
         else:
@@ -92,7 +103,6 @@ class ConfidenceDepthFrameworkFactory():
             file, key = parts
             checkpoint = torch.load(file)
             weights = checkpoint['model_state'][key]
-
 
         model_dict = model.state_dict()
         # overwrite entries in the existing state dict
@@ -111,6 +121,18 @@ class ConfidenceDepthFrameworkFactory():
 
     def create_model(self, input_type, overall_arch, dc_arch, dc_weights, conf_arch=None
                      , conf_weights=None, lossdc_arch=None, lossdc_weights=None):
+        """
+
+        :param input_type:
+        :param overall_arch:
+        :param dc_arch:
+        :param dc_weights:
+        :param conf_arch:
+        :param conf_weights:
+        :param lossdc_arch:
+        :param lossdc_weights:
+        :return:
+        """
 
         cdfmodel = ConfidenceDepthFrameworkModel()
 
@@ -130,13 +152,15 @@ class ConfidenceDepthFrameworkFactory():
             else:
                 output_type = 'dc'
 
-            cdfmodel.dc_model = self.create_dc_model(dc_arch, dc_weights, input_type , output_type)
+            cdfmodel.dc_model = self.create_dc_model(dc_arch, dc_weights, input_type, output_type)
 
         if 'cf' in overall_arch:
-            cdfmodel.conf_model = self.create_conf_model(model_arch=conf_arch, pretrained_args=conf_weights, dc_model=cdfmodel.dc_model)
+            cdfmodel.conf_model = self.create_conf_model(model_arch=conf_arch, pretrained_args=conf_weights,
+                                                         dc_model=cdfmodel.dc_model)
 
         if 'ln' in overall_arch:
-            cdfmodel.loss_dc_model = self.create_dc_model(model_arch=lossdc_arch, pretrained_args=lossdc_weights, input_type='rgbdc',
+            cdfmodel.loss_dc_model = self.create_dc_model(model_arch=lossdc_arch, pretrained_args=lossdc_weights,
+                                                          input_type='rgbdc',
                                                           output_type='d')
 
         cdfmodel.input_size = len(input_type)
@@ -158,14 +182,14 @@ class ConfidenceDepthFrameworkFactory():
 
         return cdfmodel, opt_parameters
 
-    def get_state(self,x):
+    def get_state(self, x):
 
         if isinstance(x, torch.nn.DataParallel):
             cdfmodel = x.module
         else:
             cdfmodel = x
 
-        state = {'input_type':cdfmodel.input_type,
+        state = {'input_type': cdfmodel.input_type,
                  'overall_arch': cdfmodel.overall_arch,
                  'dc_arch': cdfmodel.dc_arch,
                  'dc_weights': cdfmodel.dc_model.state_dict(),
@@ -176,19 +200,19 @@ class ConfidenceDepthFrameworkFactory():
                  }
         return state
 
-    def create_model_from_state(self,state):
+    def create_model_from_state(self, state):
         return self.create_model(state['input_type'],
-                                state['overall_arch'],
-                                state['dc_arch'],
-                                state['dc_weights'],
-                                state['conf_arch'],
-                                state['conf_weights'],
-                                state['loss_dc_arch'],
-                                state['lossdc_weights'])
+                                 state['overall_arch'],
+                                 state['dc_arch'],
+                                 state['dc_weights'],
+                                 state['conf_arch'],
+                                 state['conf_weights'],
+                                 state['loss_dc_arch'],
+                                 state['lossdc_weights'])
 
 
 def init_weights(m):
-    #from Ma and Karaman 2018
+    # from Ma and Karaman 2018
     if isinstance(m, nn.Conv2d) or isinstance(m, nn.Linear):
         m.weight.data.normal_(0, 0.02)
         if m.bias is not None:
@@ -211,15 +235,14 @@ class ConfidenceDepthFrameworkModel(torch.nn.Module):
         self.conf_model = None
         self.loss_dc_model = None
         self.overall_arch = ''
-        self.input_size = 0 #acceptable inputs are 3:rgb, 4:rgbd, 5:rgbdc
+        self.input_size = 0  # acceptable inputs are 3:rgb, 4:rgbd, 5:rgbdc
 
-
-    def forward(self, input): #input rgbdc
-        dc_x = input[:,:self.input_size,:,:]
-        depth1,conf_x = self.dc_model(dc_x,(self.loss_dc_model is not None))
+    def forward(self, input):  # input rgbdc
+        dc_x = input[:, :self.input_size, :, :]
+        depth1, conf_x = self.dc_model(dc_x, (self.loss_dc_model is not None))
 
         if self.conf_model is not None:
-            assert(conf_x is not None),'dc_model does not support extern confidence net'
+            assert (conf_x is not None), 'dc_model does not support extern confidence net'
             conf1 = self.conf_model(conf_x)
         elif conf_x is not None:
             conf1 = conf_x
@@ -227,8 +250,8 @@ class ConfidenceDepthFrameworkModel(torch.nn.Module):
             conf1 = None
 
         if self.loss_dc_model is not None:
-            rgbd1c1= torch.cat([input[:,:3,:,:],depth1,conf1],dim=1)
-            depth2,_ = self.loss_dc_model(rgbd1c1,False)
+            rgbd1c1 = torch.cat([input[:, :3, :, :], depth1, conf1], dim=1)
+            depth2, _ = self.loss_dc_model(rgbd1c1, False)
         else:
             depth2 = None
 
@@ -293,23 +316,23 @@ class ConfidenceDepthFrameworkModel(torch.nn.Module):
 
 
 ###########################################
-#Confidence nets
+# Confidence nets
 ###########################################
 
 class CBR3C1Confidence(nn.Module):
 
-    def __init__(self,in_channels):
+    def __init__(self, in_channels):
         super(CBR3C1Confidence, self).__init__()
 
         self.conv1 = nn.Conv2d(in_channels, in_channels, 3, 1,
-                                1, bias=False)
+                               1, bias=False)
 
         self.bn1 = nn.BatchNorm2d(in_channels)
 
-        self.relu1 =nn.LeakyReLU(0.2, inplace=True)
+        self.relu1 = nn.LeakyReLU(0.2, inplace=True)
 
         self.conv2 = nn.Conv2d(in_channels, 1, 1, 1,
-                                0, bias=True)
+                               0, bias=True)
 
         # initialize the weights
         init_weights(self.conv1)
@@ -320,7 +343,7 @@ class CBR3C1Confidence(nn.Module):
         testing_unguided_confidence = False
 
         if testing_unguided_confidence:
-            x = x [:, -2:-1, :, :]
+            x = x[:, -2:-1, :, :]
         else:
             x = self.conv1(x)
             x = self.bn1(x)
@@ -331,25 +354,25 @@ class CBR3C1Confidence(nn.Module):
 
 class CBR3CBR1C1Confidence(nn.Module):
 
-    def __init__(self,in_channels):
+    def __init__(self, in_channels):
         super(CBR3CBR1C1Confidence, self).__init__()
 
         self.conv1 = nn.Conv2d(in_channels, in_channels, 3, 1,
-                                1, bias=False)
+                               1, bias=False)
 
         self.bn1 = nn.BatchNorm2d(in_channels)
 
-        self.relu1 =nn.LeakyReLU(0.2, inplace=True)
+        self.relu1 = nn.LeakyReLU(0.2, inplace=True)
 
-        self.conv2 = nn.Conv2d(in_channels, in_channels//2, 1, 1,
+        self.conv2 = nn.Conv2d(in_channels, in_channels // 2, 1, 1,
                                0, bias=False)
 
-        self.bn2 = nn.BatchNorm2d(in_channels//2)
+        self.bn2 = nn.BatchNorm2d(in_channels // 2)
 
         self.relu2 = nn.LeakyReLU(0.2, inplace=True)
 
-        self.conv3 = nn.Conv2d(in_channels//2, 1, 1, 1,
-                                0, bias=True)
+        self.conv3 = nn.Conv2d(in_channels // 2, 1, 1, 1,
+                               0, bias=True)
 
         # initialize the weights
         init_weights(self.conv1)
@@ -405,18 +428,19 @@ class CBR3CBR1C1ResConfidence(nn.Module):
         x = self.conv2(y)
         x = self.bn2(x)
         x = self.relu2(x)
-        x = self.conv3(torch.cat([x,y],dim=1))
+        x = self.conv3(torch.cat([x, y], dim=1))
         return torch.sigmoid(x)
 
 
 class ForwardConfidence(nn.Module):
 
-    def __init__(self,in_channels):
+    def __init__(self, in_channels):
         super(ForwardConfidence, self).__init__()
 
     def forward(self, x):
-        assert(x.size()[1] == 1), 'forward confidence need to have only one channel'
+        assert (x.size()[1] == 1), 'forward confidence need to have only one channel'
         return x
+
 
 ################################################
 # depth_completion nets
@@ -426,7 +450,7 @@ class ForwardConfidence(nn.Module):
 class GEDNet(nn.Module):
 
     def __init__(self, pos_fn='SoftPlus', pretrained=None, out_channels=1):
-        super(GEDNet,self).__init__()
+        super(GEDNet, self).__init__()
 
         self.out_channels = out_channels
 
@@ -458,9 +482,6 @@ class GEDNet(nn.Module):
             nn.init.kaiming_normal_(m.weight)
             nn.init.constant_(m.bias, 0.01)
 
-
-
-
     def forward(self, x0, build_conf_input):
 
         x0_rgb = x0[:, :3, :, :]
@@ -471,10 +492,8 @@ class GEDNet(nn.Module):
         else:
             c0 = x0[:, 4:5, :, :]
 
-
         # Depth Network
         xout_d, cout_d = self.d_net(x0_d, c0)
-
 
         # U-Net
         x1 = F.relu(self.conv1(torch.cat((xout_d, x0_rgb, cout_d), 1)))
@@ -482,7 +501,6 @@ class GEDNet(nn.Module):
         x3 = F.relu(self.conv3(x2))
         x4 = F.relu(self.conv4(x3))
         x5 = F.relu(self.conv5(x4))
-
 
         # Upsample 1
         x5u = F.interpolate(x5, x4.size()[2:], mode='nearest')
@@ -507,9 +525,9 @@ class GEDNet(nn.Module):
 
         if build_conf_input:
             if self.out_channels == 1:
-                features = torch.cat((last_layer_input,xout_d, cout_d,x10), 1) # 32 + 2 + 1 + 1
-            else: #out_channels == 2
-                features = torch.sigmoid(x10[:,1:2,:,:]) #it is already the confidence
+                features = torch.cat((last_layer_input, xout_d, cout_d, x10), 1)  # 32 + 2 + 1 + 1
+            else:  # out_channels == 2
+                features = torch.sigmoid(x10[:, 1:2, :, :])  # it is already the confidence
         else:
             features = None
 
@@ -520,8 +538,8 @@ class GEDNet(nn.Module):
 
 class GMSNet(nn.Module):
 
-    def __init__(self,pos_fn='SoftPlus', out_channels=1):
-        super(GMSNet,self).__init__()
+    def __init__(self, pos_fn='SoftPlus', out_channels=1):
+        super(GMSNet, self).__init__()
 
         self.out_channels = out_channels
 
@@ -614,7 +632,6 @@ class GMSNet(nn.Module):
                         nn.init.xavier_normal_(p.weight)
                         nn.init.constant_(p.bias, 0.01)
 
-
         nn.init.xavier_normal_(self.last_layer.weight)
         nn.init.constant_(self.last_layer.bias, 0.01)
 
@@ -658,9 +675,9 @@ class GMSNet(nn.Module):
 
         if build_conf_input:
             if self.out_channels == 1:
-                features = torch.cat((last_layer_input,xout_d, cout_d,xout), 1) # 32 + 16 + 1 + 1
-            else: #out_channels == 2
-                features = torch.sigmoid(xout[:,1:2,:,:]) #it is already the confidence
+                features = torch.cat((last_layer_input, xout_d, cout_d, xout), 1)  # 32 + 16 + 1 + 1
+            else:  # out_channels == 2
+                features = torch.sigmoid(xout[:, 1:2, :, :])  # it is already the confidence
         else:
             features = None
 
@@ -668,10 +685,11 @@ class GMSNet(nn.Module):
 
         return depth, features
 
+
 class NconvMS(nn.Module):
 
-    def __init__(self,pos_fn=None):
-        super(NconvMS,self).__init__()
+    def __init__(self, pos_fn=None):
+        super(NconvMS, self).__init__()
 
         self.out_feature_channels = 1
 
@@ -799,7 +817,7 @@ class NconvMS(nn.Module):
         self.xf = xout
         self.cf = cout_d
 
-        return xout,cout_d
+        return xout, cout_d
 
 
 ################################################
@@ -830,11 +848,9 @@ class MaskedMSELoss(nn.Module):
     def __init__(self):
         super(MaskedMSELoss, self).__init__()
 
-    def forward(self,depth_input, depth_prediction, depth_target,epoch=None):
+    def forward(self, depth_input, depth_prediction, depth_target, epoch=None):
         assert depth_prediction.dim() == depth_target.dim(), "inconsistent dimensions"
-
-        valid_mask = ((depth_target>0).detach())
-
+        valid_mask = ((depth_target > 0).detach())
         num_valids = valid_mask.sum()
         assert (num_valids > 100), 'training image has less than 100 valid pixels'
 
@@ -843,7 +859,7 @@ class MaskedMSELoss(nn.Module):
 
         final_loss = (diff ** 2).mean()
 
-        self.loss = [final_loss.item(),0,0]
+        self.loss = [final_loss.item(), 0, 0]
 
         return final_loss
 
@@ -852,18 +868,17 @@ class InvertedMaskedL1Loss(nn.Module):
     def __init__(self):
         super(InvertedMaskedL1Loss, self).__init__()
 
-    def forward(self,depth_input, depth_prediction, depth_target,epoch=None):
-
+    def forward(self, depth_input, depth_prediction, depth_target, epoch=None):
         assert depth_prediction.dim() == depth_target.dim(), "inconsistent dimensions"
-        valid_mask = ((depth_target>0).detach())
+        valid_mask = ((depth_target > 0).detach())
 
         num_valids = valid_mask.sum()
         assert (num_valids > 100), 'training image has less than 100 valid pixels'
 
-        diff = ((1.0/(depth_target[valid_mask])) - (1.0/(depth_prediction[valid_mask]))).abs()
+        diff = ((1.0 / (depth_target[valid_mask])) - (1.0 / (depth_prediction[valid_mask]))).abs()
         final_loss = diff.mean()
 
-        self.loss = [final_loss.item(),0,0]
+        self.loss = [final_loss.item(), 0, 0]
 
         return final_loss
 
@@ -872,11 +887,10 @@ class MaskedAbsRelLoss(nn.Module):
     def __init__(self):
         super(MaskedAbsRelLoss, self).__init__()
 
-    def forward(self,depth_input, depth_prediction, depth_target,epoch=None):
-
+    def forward(self, depth_input, depth_prediction, depth_target, epoch=None):
         assert depth_prediction.dim() == depth_target.dim(), "inconsistent dimensions"
 
-        valid_mask = ((depth_target>0).detach())
+        valid_mask = ((depth_target > 0).detach())
 
         num_valids = valid_mask.sum()
         assert (num_valids > 100), 'training image has less than 100 valid pixels'
@@ -884,11 +898,11 @@ class MaskedAbsRelLoss(nn.Module):
         diff = depth_target - depth_prediction
         diff = diff[valid_mask]
 
-        abs_rel_diff = (diff/depth_target[valid_mask]).abs()
+        abs_rel_diff = (diff / depth_target[valid_mask]).abs()
 
         final_loss = abs_rel_diff.mean()
 
-        self.loss = [final_loss.item(),0,0]
+        self.loss = [final_loss.item(), 0, 0]
 
         return final_loss
 
@@ -898,9 +912,9 @@ class MaskedL1Loss(nn.Module):
         super(MaskedL1Loss, self).__init__()
         self.loss = -1
 
-    def forward(self,depth_input, depth_prediction, depth_target,epoch=None):
+    def forward(self, depth_input, depth_prediction, depth_target, epoch=None):
         assert depth_prediction.dim() == depth_target.dim(), "inconsistent dimensions"
-        valid_mask = (depth_target>0).detach()
+        valid_mask = (depth_target > 0).detach()
 
         num_valids = valid_mask.sum()
         assert (num_valids > 100), 'training image has less than 100 valid pixels'
@@ -909,6 +923,6 @@ class MaskedL1Loss(nn.Module):
         diff = diff[valid_mask]
 
         final_loss = diff.abs().mean()
-        self.loss = [final_loss.item(),0,0]
+        self.loss = [final_loss.item(), 0, 0]
 
         return final_loss

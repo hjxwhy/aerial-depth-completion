@@ -456,6 +456,9 @@ class MVSScene(object):
         _depths_out, _masks_out = mask_depth(_depths_out, self.depth_min, self.depth_max)
         sparse_out /= self.depth_max
         _depths_out /= self.depth_max
+        # print(images_out.shape)
+        # print(_depths_out.shape)
+        # print(sparse_out.shape)
         # item = {
         #     'image': images_out,
         #     'sparse': sparse_out / self.depth_max,
@@ -464,8 +467,11 @@ class MVSScene(object):
         #     'mask_out': _masks_out,
         #     'scale': 1 / self.depth_max
         # }
+        # print(np.concatenate([images_out, sparse_out], axis=1).shape)
 
-        return np.concatenate([images_out, sparse_out], axis=1), _depths_out, torch.tensor(1 / self.depth_max).unsqueeze(0)
+        confidence = np.ones_like(sparse_out[0, ...])
+        return np.concatenate([images_out[0, ...], sparse_out[0, ...], confidence], axis=0), _depths_out[
+            np.newaxis, 0, ...], torch.tensor(1 / self.depth_max).unsqueeze(0)
 
     @staticmethod
     def scale_pose(pose: np.ndarray, scale: float):
@@ -687,7 +693,7 @@ class MVSDataset(Dataset):
                  interpolation: int = cv2.INTER_NEAREST, transform=None, use_sparse=True, normalize_depth=False):
         super(MVSDataset, self).__init__()
         self.root_dir = root_dir
-        self.split = fix_extension(split, '.txt')
+        self.split = fix_extension(split, '.txt')  # [train.txt,val.txt]
         self.pose_ext = pose_ext
         self.interpolation = interpolation
         self.dtype = dtype

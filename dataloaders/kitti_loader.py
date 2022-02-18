@@ -247,8 +247,9 @@ class KittiDepth(data.Dataset):
             scale = 1.0 / self.depth_divisor
 
 
-        input_np = np.append(rgb/255.0, sparse*scale, axis=2)
+        input_np = np.append(rgb/255.0, sparse*scale, axis=2)  # 3
         input_np = input_np.transpose((2, 0, 1))
+
         confidence = np.zeros_like(input_np[0, :, :])
         valid_mask = ((input_np[3, :, :] > 0))
         confidence[valid_mask] = 1.0
