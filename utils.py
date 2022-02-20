@@ -168,28 +168,23 @@ def merge_into_row_with_gt(input, depth_input, depth_target, depth_pred, normal_
 
     return img_merge
 
-
-jet_color_map = plt.cm.jet  # plt.cm.seismic gist_rainbow
-
-
-def colored_depthmap2(depth, d_min=None, d_max=None):
+# jet_color_map = plt.cm.jet
+def colored_depthmap2(depth, d_min=None, d_max=None, jet_color_map=plt.cm.plasma):
     if d_min is None:
         d_min = np.min(depth)
     if d_max is None:
         d_max = np.max(depth)
-    depth_relative = (depth - d_min) / (d_max - d_min + 10e-8)
+    depth_relative = (depth - d_min * 1.07) / (d_max - d_min + 10e-8)
     return 255 * jet_color_map(depth_relative)[:, :, :3]  # H, W, C
 
 
-def merge_into_row_with_gt2(rgb, input_depth, input_conf, in_gt_depth, out_depth1, out_conf1=None, out_depth2=None):
+def merge_into_row_with_gt2(rgb, input_depth, input_conf, in_gt_depth, out_depth1, out_conf1=None, out_depth2=None,
+                            if_hstack=False):
     rgb = 255 * np.transpose(np.squeeze(rgb.cpu().numpy()), (1, 2, 0))  # H, W, C
     depth_input_cpu = np.squeeze(input_depth.cpu().numpy())
     depth_conf_cpu = np.squeeze(input_conf.cpu().numpy())
     depth_target_cpu = np.squeeze(in_gt_depth.cpu().numpy())
     depth_pred_cpu = np.squeeze(out_depth1.detach().cpu().numpy())
-
-
-
     if out_conf1 is not None:
         out_conf_cpu = np.squeeze(out_conf1.detach().cpu().numpy())
     else:
@@ -202,17 +197,19 @@ def merge_into_row_with_gt2(rgb, input_depth, input_conf, in_gt_depth, out_depth
 
     target_depth_mask = depth_target_cpu > 10e-5
     sparse_depth_mask = depth_input_cpu < 10e-5
-
-    # depth colormap
     d_min = np.min(depth_target_cpu[target_depth_mask])
     d_max = np.max(depth_target_cpu)
 
+    # depth colormap
     depth_input_col = colored_depthmap2(depth_input_cpu, d_min, d_max)
     depth_input_col[sparse_depth_mask, :] = 0
+
     depth_target_col = colored_depthmap2(depth_target_cpu, d_min, d_max)
-    depth_pred_col = colored_depthmap2(depth_pred_cpu, d_min, d_max)
-    depth2_pred_col = colored_depthmap2(out_depth2_cpu, d_min, d_max)
     depth_target_col[~target_depth_mask, :] = 0
+
+    depth_pred_col = colored_depthmap2(depth_pred_cpu, d_min, d_max)
+
+    depth2_pred_col = colored_depthmap2(out_depth2_cpu, d_min, d_max)
 
     # conf_colormap
     c_min = np.min(out_conf_cpu[target_depth_mask])
@@ -227,15 +224,16 @@ def merge_into_row_with_gt2(rgb, input_depth, input_conf, in_gt_depth, out_depth
     abs_diff = np.absolute((depth_pred_cpu - depth_target_cpu))
     absrel = np.zeros_like(abs_diff)
     absrel[target_depth_mask] = abs_diff[target_depth_mask] / depth_target_cpu[target_depth_mask]
-    diff_col_abs = colored_depthmap2(abs_diff, 0, 5)
+    diff_col_abs = colored_depthmap2(abs_diff, 0, 0.0002)
     diff_col_abs[~target_depth_mask, :] = 0
     diff_col_rel = colored_depthmap2(absrel, 0, 0.1)
     diff_col_rel[~target_depth_mask, :] = 0
-
-    img_merge = np.hstack([rgb, depth_input_col, depth_conf_col, depth_target_col, depth_pred_col,
-                           depth2_pred_col, out_conf_col, diff_col_abs, diff_col_rel, hist])
-
-    return img_merge
+    if if_hstack:
+        img_merge = np.hstack([rgb, depth_input_col, depth_conf_col, depth_target_col, depth_pred_col,
+                               depth2_pred_col, out_conf_col, diff_col_abs, diff_col_rel, hist])
+        return img_merge
+    else:
+        return rgb, depth_input_col, depth_conf_col, depth_target_col, depth_pred_col, depth2_pred_col, out_conf_col, diff_col_abs, diff_col_rel, hist
 
 
 def write_minmax(size_image, dmin, dmax, cmin, cmax):

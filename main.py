@@ -83,7 +83,7 @@ def main_func(args):
         cdfmodel, loss, epoch = trainer.resume(args.evaluate, cdf, True)
         output_directory = create_eval_output_folder(args)
         os.makedirs(output_directory)
-        print("\033[31m=> output directory: {0}\033[0m".format(output_directory))
+        print("\033[31m=> val output directory: {0}\033[0m".format(output_directory))
         save_arguments(args, output_directory)
         trainer.validate(val_loader, cdfmodel, loss, epoch, print_frequency=args.print_freq,
                          num_image_samples=args.val_images, output_folder=output_directory, conf_recall=args.pr,
@@ -94,7 +94,7 @@ def main_func(args):
 
     output_directory = create_output_folder(args)  # results/***
     os.makedirs(output_directory)
-    print("\033[31m=> output directory: {0}\033[0m".format(output_directory))
+    print("\033[31m=> train and val output directory: {0}\033[0m".format(output_directory))
     save_arguments(args, output_directory)  # 保存参数
 
     # model

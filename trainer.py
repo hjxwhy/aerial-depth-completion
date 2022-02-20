@@ -7,6 +7,7 @@ import utils
 import torch
 import torch.backends.cudnn as cudnn
 from tqdm import tqdm
+from pathlib import Path
 
 cudnn.benchmark = True
 import GPUtilext
@@ -73,7 +74,7 @@ def create_command_parser():
 
     parser.add_argument('-j', '--workers', default=6, type=int, metavar='N',
                         help='number of data loading workers (default: 10)')
-    parser.add_argument('--epochs', default=8, type=int, metavar='N',
+    parser.add_argument('--epochs', default=50, type=int, metavar='N',
                         help='number of total epochs to run (default: 15)')
 
     parser.add_argument('--max-gt-depth', default=250.0, type=float, metavar='D',
@@ -237,39 +238,83 @@ def print_error(type, num_total_samples, average, result, loss, data_time, gpu_t
 class ResultSampleImage():
     def __init__(self, output_directory, epoch, num_samples, total_images):
         self.normal_net = None
-        self.image = None
+        self.image = None  # 图片
         self.num_samples = num_samples
         self.sample_step = total_images // float(num_samples)
         self.filename = output_directory + '/comparison_' + str(epoch) + '.png'
+        self.filename_ = Path(output_directory + '/epoch_' + str(epoch))
+        if not self.filename_.exists():
+            os.makedirs(self.filename_)
 
     def save(self, input, prediction, target, to_disk=False):
-        rgb = input[0, :3, :, :]
-        input_depth = input[0, 3:4, :, :]
-        input_conf = input[0, 4:5, :, :]
-        in_gt_depth = target[0, :1, :, :]
-        out_depth1 = prediction[0][0, :1, :, :]
+        """
 
+        :param input:
+        :param prediction:
+        :param target:
+        :param to_disk:
+        :return:
+        """
+        rgb = input[0, :3, :, :]  # 图片
+        input_depth = input[0, 3:4, :, :]  # 输入稀疏深度
+        input_conf = input[0, 4:5, :, :]  # 输入深度的cov
+        in_gt_depth = target[0, :1, :, :]  # 地面真值
+        out_depth1 = prediction[0][0, :1, :, :]  # 输出
         if prediction[1] is not None:
             out_conf1 = prediction[1][0, :1, :, :]
         else:
             out_conf1 = None
-
         if prediction[2] is not None:
             out_depth2 = prediction[2][0, :1, :, :]
         else:
             out_depth2 = None
 
-        row = utils.merge_into_row_with_gt2(rgb, input_depth, input_conf, in_gt_depth, out_depth1, out_conf1,
-                                            out_depth2)
+        row = utils.merge_into_row_with_gt2(rgb, input_depth, input_conf, in_gt_depth,
+                                            out_depth1, out_conf1,
+                                            out_depth2, if_hstack=True)
         if (self.image is not None):
-            self.image = utils.add_row(self.image, row)
+            self.image = utils.add_row(self.image, row)  # 图片加一行
         else:
             self.image = row
 
         if to_disk:
             utils.save_image(self.image, self.filename)
 
+    def save_sample(self, i, input, prediction, target):
+        rgb = input[0, :3, :, :]  # 图片
+        input_depth = input[0, 3:4, :, :]  # 输入稀疏深度
+        input_conf = input[0, 4:5, :, :]  # 输入深度的cov
+        in_gt_depth = target[0, :1, :, :]  # 地面真值
+        out_depth1 = prediction[0][0, :1, :, :]  # 输出
+        if prediction[1] is not None:
+            out_conf1 = prediction[1][0, :1, :, :]
+        else:
+            out_conf1 = None
+        if prediction[2] is not None:
+            out_depth2 = prediction[2][0, :1, :, :]
+        else:
+            out_depth2 = None
+
+        rgb, depth_input_col, depth_conf_col, depth_target_col, depth_pred_col, depth2_pred_col, out_conf_col, diff_col_abs, diff_col_rel, hist = utils.merge_into_row_with_gt2(
+            rgb, input_depth,
+            input_conf,
+            in_gt_depth,
+            out_depth1, out_conf1,
+            out_depth2)
+
+        utils.save_image(rgb, self.filename_ / (str(i) + "_RGB.png"))
+        utils.save_image(depth_target_col, self.filename_ / (str(i) + "_gt.png"))
+        utils.save_image(depth_pred_col, self.filename_ / (str(i) + "_depth.png"))
+
     def update(self, i, input, prediction, target):
+        """
+
+        :param i:
+        :param input:
+        :param prediction:
+        :param target:
+        :return:
+        """
         if (i % self.sample_step) == 0:
             self.save(input, prediction, target, ((i % 2 * self.sample_step) == 0))
 
@@ -422,6 +467,7 @@ def validate(val_loader, model, criterion, epoch, num_image_samples=4, print_fre
                                     target_depth.data)
 
         rsi.update(i, input, prediction, target_depth)  # 图片输出
+        # rsi.save_sample(i, input, prediction, target_depth)
 
     final_result = average_meter[0].average()
     report_epoch_error(os.path.join(output_folder, 'val.csv'), epoch, average_meter[0].average())
